@@ -1,4 +1,15 @@
-const API_BASE = ""; // 使用相对路径以确保在子域名和主域名下都能正确访问后端 API
+// 自动检测 API 基础路径
+const getApiBase = () => {
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  // 如果在指定的子域名下，强制指向主域名后端
+  if (host === 'test.sd-education.online' || host === 'listening.sd-education.online') {
+    return "https://www.sd-education.online";
+  }
+  // 在 AI Studio 预览环境或本地开发时，使用相对路径
+  return ""; 
+};
+
+const API_BASE = getApiBase();
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Play, 
@@ -72,7 +83,9 @@ export default function App() {
     const fetchLibrary = async () => {
       try {
         const response = await fetch(`${API_BASE}/api/materials`);
-        if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        
+        if (response.ok && contentType && contentType.includes('application/json')) {
           const data = await response.json();
           if (Array.isArray(data)) {
             setMaterials(data);
@@ -80,6 +93,10 @@ export default function App() {
             console.error("Received non-array data for materials:", data);
             setMaterials([]);
           }
+        } else {
+          const text = await response.text();
+          console.warn(`Library fetch failed - Status: ${response.status}, Content-Type: ${contentType}`);
+          throw new Error('Invalid response from server');
         }
       } catch (e: any) {
         console.error("Backend Library Load Error", e);
@@ -232,30 +249,31 @@ export default function App() {
         const data = await res.json();
         if (res.ok) {
           console.log('Login Success:', data.user.username);
-          setUser(data.user);
-          localStorage.setItem('echomaster_user', JSON.stringify(data.user));
+            setUser(data.user);
+            localStorage.setItem('echomaster_user', JSON.stringify(data.user));
+          } else {
+            console.warn('Login Rejected:', data.error);
+            // 确保 errorMessage 永远是字符串，防止 React Error #31
+            const errObj = data.error || data;
+            const errorMessage = typeof errObj === 'string' 
+              ? errObj 
+              : (errObj.message || JSON.stringify(errObj));
+            setAuthError(errorMessage);
+          }
         } else {
-          console.warn('Login Rejected:', data.error);
-          const errorMessage = typeof data.error === 'string' 
-            ? data.error 
-            : (data.error?.message || data.message || JSON.stringify(data.error || data));
-          setAuthError(errorMessage);
+          const text = await res.text();
+          console.error('Login Error Response:', {
+            status: res.status,
+            contentType,
+            bodyStart: text.substring(0, 100)
+          });
+          
+          if (res.status === 404) {
+            setAuthError(`登录失败 (404): 接口未找到。请检查后端服务是否在 ${API_BASE || '当前域名'} 运行。`);
+          } else {
+            setAuthError(`服务器错误 (${res.status}): 请联系管理员。`);
+          }
         }
-      } else {
-        const text = await res.text();
-        console.error('Login Error Response:', {
-          status: res.status,
-          statusText: res.statusText,
-          contentType,
-          bodyStart: text.substring(0, 100)
-        });
-        
-        if (res.status === 404) {
-          setAuthError(`登录失败 (404): 服务器路径未找到。请确 ${window.location.host} 的 API 转发规则已生效。`);
-        } else {
-          setAuthError(`服务器异常 (${res.status}): ${text.substring(0, 20)}...`);
-        }
-      }
     } catch (err: any) {
       console.error('CRITICAL: Login Network Error', err);
       const targetUrl = `${API_BASE || window.location.origin}/api/login`;
@@ -292,7 +310,11 @@ export default function App() {
           localStorage.setItem('echomaster_user', JSON.stringify(data.user));
         } else {
           console.warn('Register Rejected:', data.error);
-          setAuthError(data.error);
+          const errObj = data.error || data;
+          const errorMessage = typeof errObj === 'string' 
+            ? errObj 
+            : (errObj.message || JSON.stringify(errObj));
+          setAuthError(errorMessage);
         }
       } else {
         const text = await res.text();
@@ -300,7 +322,7 @@ export default function App() {
           status: res.status,
           bodyStart: text.substring(0, 50)
         });
-        setAuthError(`注册失败 (${res.status}): 服务器路由未找到`);
+        setAuthError(`注册失败 (${res.status}): 接口不可用。`);
       }
     } catch (err: any) {
       console.error('CRITICAL: Register Network Error', err);
