@@ -10,7 +10,7 @@ GLOBAL_STORE = {
     "materials": [],
     "users": {
         "jerry": {"password": "sdeducation", "role": "admin", "name": "Jerry Admin"},
-        "test01": {"password": "password123", "role": "user", "name": "测试用户"}
+        "admin": {"password": "admin123", "role": "admin", "name": "systerm Admin"}
     }
 }
 
