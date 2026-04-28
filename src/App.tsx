@@ -94,7 +94,11 @@ export default function App() {
         console.error(`Attempted URL: ${API_BASE || window.location.origin}/materials`);
         // Fallback to localStorage if backend fails
         const savedLibrary = localStorage.getItem('echomaster_library');
-        if (savedLibrary) setMaterials(JSON.parse(savedLibrary));
+        const res = await fetch('/api/materials');
+        if (res.ok) {
+        const data = await res.json();
+        setMaterials(data); // 必须执行这一步，才能实现全员同步
+}
       }
     };
     
