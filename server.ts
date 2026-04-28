@@ -34,31 +34,29 @@ try {
 app.set('trust proxy', true);
 
 // 1. Basic Middlewares
-// 极致兼容的跨域处理 (支持子域名 Cookie 共享与凭证)
+// 极其强力的跨域处理，确保所有子域名都能正常访问
 app.use((req, res, next) => {
   const origin = req.get('Origin');
   
-  // 允许所有 sd-education.online 的子域名以及 localhost
-  const isTrustedOrigin = origin && (
-    origin === 'https://www.sd-education.online' ||
-    origin === 'http://www.sd-education.online' ||
-    origin.endsWith('.sd-education.online') || 
-    origin.includes('localhost')
-  );
-
-  if (isTrustedOrigin) {
-    res.setHeader('Access-Control-Allow-Origin', origin!);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  if (origin) {
+    // 只要来源包含 sd-education.online，就反射该来源并允许凭证
+    if (origin.includes('sd-education.online') || origin.includes('localhost')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      // 其他来源允许跨域请求，但不能带凭证
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
   } else {
-    // 降级：如果不是信任域名，且跨域，则只允许读取，不允许带凭证
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    // 非浏览器请求或同源请求
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin, Cookie, X-JSON');
   res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie, Content-Length');
 
-  // 处理预检请求 (OPTIONS)
+  // 预检请求直接拦截返回
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
@@ -92,7 +90,16 @@ app.get('/api/health', (req, res) => {
     status: 'ok', 
     supabaseConnected: !!supabase,
     env: process.env.NODE_ENV,
-    serverTime: new Date().toISOString() 
+    serverTime: new Date().toISOString(),
+    corsOrigin: req.get('Origin') || 'None'
+  });
+});
+
+app.get('/api/cors-test', (req, res) => {
+  res.json({ 
+    message: 'CORS is working', 
+    origin: req.get('Origin'),
+    headers: req.headers
   });
 });
 
