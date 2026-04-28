@@ -261,6 +261,7 @@ export default function App() {
       });
       
       const contentType = res.headers.get('content-type');
+      
       if (res.ok && contentType && contentType.includes('application/json')) {
         const data = await res.json();
         setUser(data.user);
@@ -284,7 +285,6 @@ export default function App() {
             errorMsg = `接口地址未找到 (404)。请确保后端服务在 ${API_BASE || '当前主域名'} 正常运行。`;
           }
         }
-        
         setAuthError(errorMsg);
       }
     } catch (err: any) {
