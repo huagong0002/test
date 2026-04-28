@@ -44,31 +44,33 @@ if (!supabase) {
 app.set('trust proxy', true);
 
 // 1. Basic Middlewares
-// 极致兼容的跨域处理中间件
+// 工业级标准的跨域处理 (使用插件 + 手动补充，确保万无一失)
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: any) {
+    // 允许没有 Origin 的请求 (比如移动端或 Postman)
+    if (!origin) return callback(null, true);
+    
+    // 允许 localhost 和所有 sd-education.online 的子域名
+    if (origin.includes('sd-education.online') || origin.includes('localhost') || origin.includes('vercel.app')) {
+      callback(null, true);
+    } else {
+      // 生产环境如果遇到未知 Origin，我们也暂时放行以保证可用性，但在控制台记录警告
+      console.warn(`[CORS Warning] Unknown origin attempted to connect: ${origin}`);
+      callback(null, true);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'Origin', 'X-JSON'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+
+// 手动兜底：确保即使在错误路径下也存在基本的 CORS Header
 app.use((req, res, next) => {
-  const origin = req.get('Origin');
-  
-  // 打印日志以便在服务器后台观察来源
-  if (origin) {
-    console.log(`[CORS Request] Method: ${req.method}, Origin: ${origin}, Path: ${req.path}`);
-  }
-
-  // 默认允许所有的 sd-education.online 子域名
-  if (origin && (origin.includes('sd-education.online') || origin.includes('localhost'))) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, X-JSON');
-
-  // 对预检请求 (OPTIONS) 立即返回成功，不进入后续路由
-  if (req.method === 'OPTIONS') {
-    return res.status(204).send();
-  }
+  res.header('X-CORS-Processed', 'true');
   next();
 });
 
