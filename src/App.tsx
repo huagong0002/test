@@ -112,6 +112,23 @@ export default function App() {
     };
     
     fetchLibrary();
+
+    // Debug: Check Backend Health
+    const checkHealth = async () => {
+      try {
+        const checkUrl = `${API_BASE}/api/health`;
+        const res = await fetch(checkUrl);
+        console.log(`Server health check: ${res.status} ${res.statusText}`);
+        if (res.ok) {
+          const data = await res.json();
+          console.log("Server health data:", data);
+        }
+      } catch (e) {
+        console.error("Server health check FAILED.", e);
+        console.error(`Check URL: ${API_BASE || window.location.origin}/api/health`);
+      }
+    };
+    checkHealth();
     
     // Load USER session from localStorage for serverless compatibility
     const savedUser = localStorage.getItem('echomaster_user');

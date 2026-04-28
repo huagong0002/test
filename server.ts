@@ -44,18 +44,32 @@ if (!supabase) {
 app.set('trust proxy', true);
 
 // 1. Basic Middlewares
-// Simplified CORS for maximum compatibility with subdomains
-app.use(cors({
-  origin: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
-app.use(express.json({ limit: '50mb' }));
+// Pre-flight and CORS handling
+app.use((req, res, next) => {
+  const origin = req.get('Origin') || '*';
+  
+  // Always set the reflected origin for allowed domains, otherwise *
+  const isInternal = origin.includes('sd-education.online') || 
+                     origin.includes('localhost') || 
+                     origin.includes('vercel.app');
 
-// Handle OPTIONS preflight explicitly for older browsers/proxies
-app.options('*', cors());
+  res.setHeader('Access-Control-Allow-Origin', isInternal ? origin : '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With');
+  
+  // Credentials must NOT be true if origin is *
+  if (isInternal && origin !== '*') {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
+
+app.use(express.json({ limit: '50mb' }));
 
 // 2. Logger Middleware
 app.use((req, res, next) => {
