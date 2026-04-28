@@ -88,7 +88,7 @@ export default function App() {
   useEffect(() => {
     const fetchLibrary = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/materials`, {
+        const response = await fetch(`${API_BASE}/materials`, {
           mode: 'cors',
           credentials: API_BASE ? 'include' : 'same-origin'
         });
@@ -121,7 +121,7 @@ export default function App() {
     // Debug: Check Backend Health
     const checkHealth = async () => {
       try {
-        const checkUrl = `${API_BASE}/api/health`;
+        const checkUrl = `${API_BASE}/health`;
         const res = await fetch(checkUrl, { 
           mode: 'cors'
         });
@@ -168,7 +168,7 @@ export default function App() {
     const syncToBackend = async () => {
       if (materials.length > 0) {
         try {
-          await fetch(`${API_BASE}/api/materials/sync`, {
+          await fetch(`${API_BASE}/materials/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ materials }),
@@ -237,7 +237,7 @@ export default function App() {
     e.stopPropagation();
     if (window.confirm('确定要删除这个听力任务吗？（这将同步删除云端数据）')) {
       try {
-        await fetch(`${API_BASE}/api/materials/${id}`, { 
+        await fetch(`${API_BASE}/materials/${id}`, { 
           method: 'DELETE',
           mode: 'cors',
           credentials: API_BASE ? 'include' : 'same-origin'
@@ -371,7 +371,7 @@ export default function App() {
   useEffect(() => {
     const checkServer = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/health`, {
+        const res = await fetch(`${API_BASE}/health`, {
           mode: 'cors',
           credentials: API_BASE ? 'include' : 'same-origin'
         });
