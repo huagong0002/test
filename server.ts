@@ -38,23 +38,27 @@ app.set('trust proxy', true);
 app.use((req, res, next) => {
   const origin = req.get('Origin');
   
-  // 允许所有 sd-education.online 的子域名
+  // 允许所有 sd-education.online 的子域名以及 localhost
   const isTrustedOrigin = origin && (
-    origin.endsWith('sd-education.online') || 
+    origin === 'https://www.sd-education.online' ||
+    origin === 'http://www.sd-education.online' ||
+    origin.endsWith('.sd-education.online') || 
     origin.includes('localhost')
   );
 
   if (isTrustedOrigin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Origin', origin!);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // 降级：如果不是信任域名，且跨域，则只允许读取，不允许带凭证
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin, Cookie');
-  res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin, Cookie, X-JSON');
+  res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie, Content-Length');
 
+  // 处理预检请求 (OPTIONS)
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }

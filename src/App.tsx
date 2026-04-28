@@ -275,7 +275,8 @@ export default function App() {
           username: authData.username.trim(), 
           password: authData.password 
         }),
-        mode: 'cors'
+        mode: 'cors',
+        credentials: API_BASE ? 'include' : 'same-origin'
       });
       
       const contentType = res.headers.get('content-type');
@@ -330,7 +331,8 @@ export default function App() {
           username: authData.username.trim(), 
           password: authData.password 
         }),
-        mode: 'cors'
+        mode: 'cors',
+        credentials: API_BASE ? 'include' : 'same-origin'
       });
       
       const contentType = res.headers.get('content-type');
