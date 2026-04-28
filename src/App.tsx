@@ -151,7 +151,7 @@ export default function App() {
     const syncToBackend = async () => {
       if (materials.length > 0) {
         try {
-          await fetch(`api/materials/sync`, {
+          await fetch(`/api/materials/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ materials }),
@@ -220,7 +220,7 @@ export default function App() {
     e.stopPropagation();
     if (window.confirm('确定要删除这个听力任务吗？（这将同步删除云端数据）')) {
       try {
-        await fetch(`api/materials/${id}`, { 
+        await fetch(`/api/materials/${id}`, { 
           method: 'DELETE',
           mode: 'cors',
           credentials: API_BASE ? 'include' : 'same-origin'
@@ -297,7 +297,7 @@ export default function App() {
     e.preventDefault();
     setAuthError(null);
     const timestamp = Date.now();
-    const apiUrl = `${API_BASE}/register?t=${timestamp}`;
+    const apiUrl = `/api/register?t=${timestamp}`;
     console.log('--- Attempting Register ---');
     
     try {
