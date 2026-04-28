@@ -1,26 +1,25 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/server.ts"
+      "destination": "/api/server"
     },
     {
-      "source": "/(login|register|ping|debug/.*)",
-      "destination": "/server.ts"
+      "source": "/ping",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/login",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/register",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/debug/(.*)",
+      "destination": "/api/server"
     },
     {
       "source": "/(.*)",

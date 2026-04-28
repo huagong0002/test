@@ -85,6 +85,18 @@ let LOCAL_USERS: any[] = [
 
 // 3. API Routes
 app.get('/ping', (req, res) => res.send('pong'));
+app.get('/api', (req, res) => {
+  res.json({ 
+    message: 'E-Listen API Server',
+    endpoints: [
+      '/api/health',
+      '/api/materials',
+      '/api/login',
+      '/api/register'
+    ]
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -314,11 +326,15 @@ setupVite().catch(err => {
 // Export for Vercel
 export default app;
 
-// Listen only if not in Vercel or if explicitly told
-const shouldListen = process.env.NODE_ENV !== 'production' || process.env.RENDER || process.env.K_SERVICE || process.env.PORT;
+// Listen only if not in Vercel
+const isVercel = process.env.VERCEL === '1' || !!process.env.NOW_REGION;
+const shouldListen = !isVercel && (process.env.NODE_ENV !== 'production' || process.env.RENDER || process.env.K_SERVICE || process.env.PORT);
+
 if (shouldListen) {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running locally on http://localhost:${PORT}`);
   });
+} else if (isVercel) {
+  console.log('🚀 Server starting in Vercel Serverless environment');
 }
 
