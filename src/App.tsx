@@ -1,4 +1,3 @@
-console.log(`[API Config] Target Base: "${API_BASE || 'Relative'}"`);
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Play, 
@@ -73,7 +72,7 @@ export default function App() {
       try {
         const response = await fetch(`/api/materials`, {
           mode: 'cors',
-          credentials: API_BASE ? 'include' : 'same-origin'
+          credentials: 'same-origin'
         });
         const contentType = response.headers.get('content-type');
         
@@ -156,7 +155,7 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ materials }),
             mode: 'cors',
-            credentials: API_BASE ? 'include' : 'same-origin'
+            credentials: 'same-origin'
           });
           localStorage.setItem('echomaster_library', JSON.stringify(materials));
         } catch (e: any) {
@@ -223,7 +222,7 @@ export default function App() {
         await fetch(`/api/materials/${id}`, { 
           method: 'DELETE',
           mode: 'cors',
-          credentials: API_BASE ? 'include' : 'same-origin'
+          credentials:'same-origin'
         });
         setMaterials(prev => prev.filter(m => m.id !== id));
         if (currentMaterialId === id) setCurrentMaterialId(null);
@@ -312,7 +311,7 @@ export default function App() {
           password: authData.password 
         }),
         mode: 'cors',
-        credentials: API_BASE ? 'include' : 'same-origin'
+        credentials: 'same-origin'
       });
       
       const contentType = res.headers.get('content-type');
@@ -353,7 +352,7 @@ export default function App() {
       try {
         const res = await fetch(`api/health`, {
           mode: 'cors',
-          credentials: API_BASE ? 'include' : 'same-origin'
+          credentials: 'same-origin'
         });
         if (res.ok) console.log("Server health check passed");
       } catch (e: any) {
