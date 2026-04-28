@@ -260,7 +260,7 @@ export default function App() {
     e.preventDefault();
     setAuthError(null);
     const timestamp = Date.now();
-    const apiUrl = `${API_BASE}/api/login?t=${timestamp}`;
+    const apiUrl = `${API_BASE}/login?t=${timestamp}`;
     console.log(`--- Attempting Login ---`);
     console.log(`Target: ${apiUrl}`);
     
@@ -317,7 +317,7 @@ export default function App() {
     e.preventDefault();
     setAuthError(null);
     const timestamp = Date.now();
-    const apiUrl = `${API_BASE}/api/register?t=${timestamp}`;
+    const apiUrl = `${API_BASE}/register?t=${timestamp}`;
     console.log('--- Attempting Register ---');
     
     try {
