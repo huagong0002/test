@@ -80,6 +80,16 @@ export default function App() {
     
     fetchLibrary();
     
+    // Load USER session from localStorage for serverless compatibility
+    const savedUser = localStorage.getItem('echomaster_user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error("Failed to parse saved user", e);
+      }
+    }
+    
     const savedId = localStorage.getItem('echomaster_current_id');
     if (savedId) setCurrentMaterialId(savedId);
   }, []);

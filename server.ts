@@ -4,145 +4,219 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'node:crypto';
 import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  console.log('--- Starting EchoMaster Server ---');
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
-  // 0. Trust Proxy for Cloudflare/Load Balancers
-  app.set('trust proxy', true);
+// Supabase Initialization
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
 
-  // 1. Basic Middlewares
-  app.use(cors({
-    origin: true, // Reflect the request origin
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With']
-  }));
-  app.use(express.json({ limit: '50mb' }));
+let supabase: any = null;
 
-  // 2. Logger Middleware
-  app.use((req, res, next) => {
-    const start = Date.now();
-    console.log(`[REQ] ${req.method} ${req.url} - Host: ${req.get('host')} - Origin: ${req.get('origin')}`);
-    res.on('finish', () => {
-      const duration = Date.now() - start;
-      console.log(`[RES] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
-    });
-    next();
+try {
+  // Only attempt to initialize if we have both URL and Key, AND the URL looks valid
+  // This prevents crashes with placeholders like "https://your-project.supabase.co"
+  if (supabaseUrl && 
+      supabaseKey && 
+      supabaseUrl.startsWith('http') && 
+      !supabaseUrl.includes('your-project.supabase.co')) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+  } else if (supabaseUrl || supabaseKey) {
+    console.warn('⚠️ Supabase credentials appear incomplete or use placeholders.');
+  }
+} catch (error) {
+  console.error('❌ Failed to initialize Supabase client:', error);
+}
+
+if (!supabase) {
+  console.warn('⚠️ Supabase persistence is disabled. Using in-memory fallback.');
+}
+
+// 0. Trust Proxy for Cloudflare/Load Balancers
+app.set('trust proxy', true);
+
+// 1. Basic Middlewares
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With']
+}));
+app.use(express.json({ limit: '50mb' }));
+
+// 2. Logger Middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  console.log(`[REQ] ${req.method} ${req.url}`);
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[RES] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
   });
+  next();
+});
 
-  // In-memory Global Store for materials
-  let GLOBAL_STORE: any[] = [];
-  let USERS: any[] = [
-    { id: '1', username: 'admin', password: 'admin123', email: 'admin@e-listen.com', role: 'admin' },
-    { id: '2', username: 'tester', password: 'password', email: 'tester@example.com', role: 'user' }
-  ];
+// In-memory Fallback (for local dev without supabase)
+let LOCAL_STORE: any[] = [];
+let LOCAL_USERS: any[] = [
+  { id: '1', username: 'admin', password: 'admin123', email: 'admin@e-listen.com', role: 'admin' },
+  { id: '2', username: 'tester', password: 'password', email: 'tester@example.com', role: 'user' }
+];
 
-  // 3. API Routes
-  app.get('/ping', (req, res) => res.send('pong'));
-  app.get('/api/health', (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.json({ status: 'ok', serverTime: new Date().toISOString() });
+// 3. API Routes
+app.get('/ping', (req, res) => res.send('pong'));
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    supabaseConnected: !!supabase,
+    serverTime: new Date().toISOString() 
   });
+});
 
-  const handleLogin = (req, res) => {
-    const { username, password } = req.method === 'GET' ? req.query : req.body;
-    console.log(`[AUTH] Login target: ${username} (Method: ${req.method})`);
-    
-    // In strict mode, only allow POST, but keep GET for debug/bypass if needed
-    const user = USERS.find(u => u.username === username && u.password === password);
-    
-    res.set('Cache-Control', 'no-store');
+app.get('/debug/host', (req, res) => {
+  res.json({
+    host: req.get('host'),
+    origin: req.get('origin'),
+    headers: req.headers,
+    env: process.env.NODE_ENV,
+    url: req.url
+  });
+});
+
+const handleLogin = async (req, res) => {
+  const { username, password } = req.method === 'GET' ? req.query : req.body;
+  
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .eq('password', password)
+      .single();
+
+    if (data) {
+      const { password: _, ...userWithoutPassword } = data as any;
+      return res.json({ success: true, user: userWithoutPassword });
+    }
+  } else {
+    const user = LOCAL_USERS.find(u => u.username === username && u.password === password);
     if (user) {
       const { password: _, ...userWithoutPassword } = user;
-      res.json({ success: true, user: userWithoutPassword });
-    } else {
-      console.warn(`! Invalid login for: ${username}`);
-      res.status(401).json({ error: '用户名或密码错误' });
+      return res.json({ success: true, user: userWithoutPassword });
     }
-  };
+  }
+  
+  res.status(401).json({ error: '用户名或密码错误' });
+};
 
-  const handleRegister = (req, res) => {
-    const { username, password } = req.body;
-    console.log(`[AUTH] Register attempt: ${username}`);
-    
-    res.set('Cache-Control', 'no-store');
-    if (USERS.find(u => u.username === username)) {
+const handleRegister = async (req, res) => {
+  const { username, password } = req.body;
+  
+  if (supabase) {
+    const { data: existing } = await supabase
+      .from('users')
+      .select('username')
+      .eq('username', username)
+      .single();
+
+    if (existing) {
       return res.status(400).json({ error: '该用户名已被占用' });
     }
-    
-    const newUser = { id: randomUUID(), username, password, email: '', role: 'user' };
-    USERS.push(newUser);
-    const { password: _, ...userWithoutPassword } = newUser;
-    res.json({ success: true, user: userWithoutPassword });
-  };
 
-  // Support multiple paths and both GET/POST for maximum compatibility with proxy redirects
-  const loginPaths = ['/api/login', '/api/login/', '/api/auth/login', '/auth/login', '/login'];
-  const registerPaths = ['/api/register', '/api/register/', '/api/auth/register', '/auth/register', '/register'];
+    const { data, error } = await supabase
+      .from('users')
+      .insert([{ id: randomUUID(), username, password, email: '', role: 'user' }])
+      .select()
+      .single();
 
-  app.all(loginPaths, handleLogin);
-  app.all(registerPaths, handleRegister);
-
-  app.get('/debug/host', (req, res) => {
-    res.json({
-      host: req.get('host'),
-      origin: req.get('origin'),
-      headers: req.headers,
-      env: process.env.NODE_ENV,
-      url: req.url
-    });
-  });
-
-  app.get('/api/materials', (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.json(GLOBAL_STORE);
-  });
-
-  app.post('/api/materials/sync', (req, res) => {
-    const { materials } = req.body;
-    res.set('Cache-Control', 'no-store');
-    if (Array.isArray(materials)) {
-      materials.forEach(newM => {
-        const index = GLOBAL_STORE.findIndex(m => m.id === newM.id);
-        if (index !== -1) {
-          if (newM.lastModified > GLOBAL_STORE[index].lastModified) {
-            GLOBAL_STORE[index] = newM;
-          }
-        } else {
-          GLOBAL_STORE.push(newM);
-        }
-      });
-      GLOBAL_STORE.sort((a, b) => b.lastModified - a.lastModified);
-      res.json({ success: true, count: GLOBAL_STORE.length });
-    } else {
-      res.status(400).json({ error: 'Invalid materials data' });
+    if (data) {
+      const { password: _, ...userWithoutPassword } = data as any;
+      return res.json({ success: true, user: userWithoutPassword });
     }
-  });
+  } else {
+    if (LOCAL_USERS.find(u => u.username === username)) {
+      return res.status(400).json({ error: '该用户名已被占用' });
+    }
+    const newUser = { id: randomUUID(), username, password, email: '', role: 'user' };
+    LOCAL_USERS.push(newUser);
+    const { password: _, ...userWithoutPassword } = newUser;
+    return res.json({ success: true, user: userWithoutPassword });
+  }
+  
+  res.status(500).json({ error: '注册失败' });
+};
 
-  app.delete('/api/materials/:id', (req, res) => {
-    const { id } = req.params;
-    GLOBAL_STORE = GLOBAL_STORE.filter(m => m.id !== id);
-    res.json({ success: true });
-  });
+app.all(['/api/login', '/login'], handleLogin);
+app.all(['/api/register', '/register'], handleRegister);
 
-  app.use('/api/*', (req, res) => {
-    console.warn(`[API 404] ${req.method} ${req.originalUrl} - Host: ${req.get('host')} - Origin: ${req.get('origin')}`);
-    res.status(404).json({ 
-      error: 'API 接口不存在', 
-      path: req.originalUrl,
-      method: req.method,
-      host: req.get('host'),
-      suggestion: '请检查 Cloudflare 是否有缓存或 Page Rules 拦截了该路径。'
+app.get('/api/materials', async (req, res) => {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('materials')
+      .select('*')
+      .order('lastModified', { ascending: false });
+    return res.json(data || []);
+  }
+  res.json(LOCAL_STORE);
+});
+
+app.post('/api/materials/sync', async (req, res) => {
+  const { materials } = req.body;
+  if (!Array.isArray(materials)) {
+    return res.status(400).json({ error: 'Invalid materials data' });
+  }
+
+  if (supabase) {
+    // Upsert materials one by one or in batch
+    // To keep it simple and robust, we use upsert
+    const { error } = await supabase
+      .from('materials')
+      .upsert(materials.map(m => ({
+        id: m.id,
+        title: m.title,
+        audioUrl: m.audioUrl,
+        script: m.script,
+        segments: m.segments,
+        lastModified: m.lastModified
+      })));
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ success: true, count: materials.length });
+  } else {
+    materials.forEach(newM => {
+      const index = LOCAL_STORE.findIndex(m => m.id === newM.id);
+      if (index !== -1) {
+        if (newM.lastModified > LOCAL_STORE[index].lastModified) {
+          LOCAL_STORE[index] = newM;
+        }
+      } else {
+        LOCAL_STORE.push(newM);
+      }
     });
-  });
+    LOCAL_STORE.sort((a, b) => b.lastModified - a.lastModified);
+    res.json({ success: true, count: LOCAL_STORE.length });
+  }
+});
 
-  // Vite middleware for development
+app.delete('/api/materials/:id', async (req, res) => {
+  const { id } = req.params;
+  if (supabase) {
+    await supabase.from('materials').delete().eq('id', id);
+  } else {
+    LOCAL_STORE = LOCAL_STORE.filter(m => m.id !== id);
+  }
+  res.json({ success: true });
+});
+
+// Vite middleware for development
+async function setupVite() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -156,10 +230,21 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+}
 
+// Initializing the server environment
+setupVite().catch(err => {
+  console.error('Failed to setup Vite:', err);
+});
+
+// Export for Vercel
+export default app;
+
+// Listen only if not in Vercel or if explicitly told
+const shouldListen = process.env.NODE_ENV !== 'production' || process.env.RENDER || process.env.K_SERVICE || process.env.PORT;
+if (shouldListen) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
