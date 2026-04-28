@@ -4,12 +4,13 @@ const getApiBase = () => {
   const host = window.location.hostname;
   const protocol = window.location.protocol;
   
-  // 如果在指定的子域名下，强制指向主域名后端
-  if (host === 'test.sd-education.online' || host === 'listening.sd-education.online' || host === 'echo.sd-education.online') {
-    return `${protocol}//www.sd-education.online`;
+  // 如果你在 test/listening/echo 等子域名下，且你明确知道后端在 www 的 Node 环境运行
+  if (host.includes('sd-education.online') && !host.startsWith('www.')) {
+    // 强制使用 https 协议指向主域
+    return "https://www.sd-education.online";
   }
   
-  // 在 AI Studio 预览环境或本地开发时，使用相对路径
+  // AI Studio 预览环境或其他环境使用相对路径
   return ""; 
 };
 

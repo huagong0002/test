@@ -44,27 +44,30 @@ if (!supabase) {
 app.set('trust proxy', true);
 
 // 1. Basic Middlewares
-// Pre-flight and CORS handling
+// 极致兼容的跨域处理中间件
 app.use((req, res, next) => {
-  const origin = req.get('Origin') || '*';
+  const origin = req.get('Origin');
   
-  // Always set the reflected origin for allowed domains, otherwise *
-  const isInternal = origin.includes('sd-education.online') || 
-                     origin.includes('localhost') || 
-                     origin.includes('vercel.app');
-
-  res.setHeader('Access-Control-Allow-Origin', isInternal ? origin : '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With');
-  
-  // Credentials must NOT be true if origin is *
-  if (isInternal && origin !== '*') {
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  // 打印日志以便在服务器后台观察来源
+  if (origin) {
+    console.log(`[CORS Request] Method: ${req.method}, Origin: ${origin}, Path: ${req.path}`);
   }
 
-  // Handle preflight
+  // 默认允许所有的 sd-education.online 子域名
+  if (origin && (origin.includes('sd-education.online') || origin.includes('localhost'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, X-JSON');
+
+  // 对预检请求 (OPTIONS) 立即返回成功，不进入后续路由
   if (req.method === 'OPTIONS') {
-    return res.status(204).end();
+    return res.status(204).send();
   }
   next();
 });
