@@ -1,20 +1,3 @@
-// 自动检测 API 基础路径
-const getApiBase = () => {
-  if (typeof window === 'undefined') return "";
-  const host = window.location.hostname;
-  
-  // 如果你在 sd-education.online 的任何子域名下（如 test, listening, echo）
-  // 我们强制指向主域名后端 https://www.sd-education.online
-  if (host.includes('sd-education.online') && !host.startsWith('www.')) {
-    return "https://www.sd-education.online";
-  }
-  
-  // 在 AI Studio 预览环境、localhost 或已经在 www 上时使用相对路径
-  return ""; 
-};
-
-const API_BASE = "/api";;
-// 调试日志，帮助确定当前请求目标
 console.log(`[API Config] Target Base: "${API_BASE || 'Relative'}"`);
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { 
@@ -88,7 +71,7 @@ export default function App() {
   useEffect(() => {
     const fetchLibrary = async () => {
       try {
-        const response = await fetch(`${API_BASE}/materials`, {
+        const response = await fetch(`/api/materials`, {
           mode: 'cors',
           credentials: API_BASE ? 'include' : 'same-origin'
         });
@@ -121,7 +104,7 @@ export default function App() {
     // Debug: Check Backend Health
     const checkHealth = async () => {
       try {
-        const checkUrl = `${API_BASE}/health`;
+        const checkUrl = `/api/health`;
         const res = await fetch(checkUrl, { 
           mode: 'cors'
         });
@@ -168,7 +151,7 @@ export default function App() {
     const syncToBackend = async () => {
       if (materials.length > 0) {
         try {
-          await fetch(`${API_BASE}/materials/sync`, {
+          await fetch(`api/materials/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ materials }),
@@ -237,7 +220,7 @@ export default function App() {
     e.stopPropagation();
     if (window.confirm('确定要删除这个听力任务吗？（这将同步删除云端数据）')) {
       try {
-        await fetch(`${API_BASE}/materials/${id}`, { 
+        await fetch(`api/materials/${id}`, { 
           method: 'DELETE',
           mode: 'cors',
           credentials: API_BASE ? 'include' : 'same-origin'
@@ -259,8 +242,7 @@ export default function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-    const timestamp = Date.now();
-    const apiUrl = `${API_BASE}/login?t=${timestamp}`;
+    const apiUrl = `/api/login?t=${Date.now()}`;
     console.log(`--- Attempting Login ---`);
     console.log(`Target: ${apiUrl}`);
     
@@ -269,20 +251,18 @@ export default function App() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+           'Accept': 'application/json'
         },
         body: JSON.stringify({ 
           username: authData.username.trim(), 
           password: authData.password 
         }),
-        mode: 'cors',
-        credentials: API_BASE ? 'include' : 'same-origin'
+        credentials: 'same-origin'
       });
       
       const contentType = res.headers.get('content-type');
       if (res.ok && contentType && contentType.includes('application/json')) {
         const data = await res.json();
-        console.log('Login Success:', data.user.username);
         setUser(data.user);
         localStorage.setItem('echomaster_user', JSON.stringify(data.user));
       } else {
@@ -371,7 +351,7 @@ export default function App() {
   useEffect(() => {
     const checkServer = async () => {
       try {
-        const res = await fetch(`${API_BASE}/health`, {
+        const res = await fetch(`api/health`, {
           mode: 'cors',
           credentials: API_BASE ? 'include' : 'same-origin'
         });
