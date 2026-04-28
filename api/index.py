@@ -5,6 +5,11 @@ from flask_cors import CORS
 # 初始化 Flask 实例，变量名必须为 app
 app = Flask(__name__)
 
+@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST']) # 双重保险
+def login():
+    # 你的逻辑
+    
 # 以健康检查为例
 @app.route('/health', methods=['GET'])
 @app.route('/api/health', methods=['GET'])
