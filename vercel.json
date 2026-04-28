@@ -1,29 +1,8 @@
 {
-  "version": 2,
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/server"
-    },
-    {
-      "source": "/ping",
-      "destination": "/api/server"
-    },
-    {
-      "source": "/login",
-      "destination": "/api/server"
-    },
-    {
-      "source": "/register",
-      "destination": "/api/server"
-    },
-    {
-      "source": "/debug/(.*)",
-      "destination": "/api/server"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/api"
     }
   ]
 }
