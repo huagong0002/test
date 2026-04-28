@@ -22,22 +22,12 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
 let supabase: any = null;
 
 try {
-  // Only attempt to initialize if we have both URL and Key, AND the URL looks valid
-  // This prevents crashes with placeholders like "https://your-project.supabase.co"
-  if (supabaseUrl && 
-      supabaseKey && 
-      supabaseUrl.startsWith('http') && 
-      !supabaseUrl.includes('your-project.supabase.co')) {
+  if (supabaseUrl && supabaseKey && !supabaseUrl.includes('your-project.supabase.co')) {
     supabase = createClient(supabaseUrl, supabaseKey);
-  } else if (supabaseUrl || supabaseKey) {
-    console.warn('⚠️ Supabase credentials appear incomplete or use placeholders.');
+    console.log('✅ Supabase Client Initialized');
   }
 } catch (error) {
-  console.error('❌ Failed to initialize Supabase client:', error);
-}
-
-if (!supabase) {
-  console.warn('⚠️ Supabase persistence is disabled. Using in-memory fallback.');
+  console.error('❌ Supabase Init Error:', error);
 }
 
 // 0. Trust Proxy for Cloudflare/Load Balancers
@@ -115,24 +105,31 @@ app.get('/debug/host', (req, res) => {
 const handleLogin = async (req, res) => {
   const { username, password } = req.method === 'GET' ? req.query : req.body;
   
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', username)
-      .eq('password', password)
-      .single();
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .maybeSingle();
 
-    if (data) {
-      const { password: _, ...userWithoutPassword } = data as any;
-      return res.json({ success: true, user: userWithoutPassword });
+      if (error) throw error;
+
+      if (data) {
+        const { password: _, ...userWithoutPassword } = data as any;
+        return res.json({ success: true, user: userWithoutPassword });
+      }
     }
-  } else {
-    const user = LOCAL_USERS.find(u => u.username === username && u.password === password);
-    if (user) {
-      const { password: _, ...userWithoutPassword } = user;
-      return res.json({ success: true, user: userWithoutPassword });
-    }
+  } catch (err: any) {
+    console.error('Supabase Login Error:', err.message);
+  }
+
+  // Fallback to local
+  const user = LOCAL_USERS.find(u => u.username === username && u.password === password);
+  if (user) {
+    const { password: _, ...userWithoutPassword } = user;
+    return res.json({ success: true, user: userWithoutPassword });
   }
   
   res.status(401).json({ error: '用户名或密码错误' });
@@ -141,50 +138,76 @@ const handleLogin = async (req, res) => {
 const handleRegister = async (req, res) => {
   const { username, password } = req.body;
   
-  if (supabase) {
-    const { data: existing } = await supabase
-      .from('users')
-      .select('username')
-      .eq('username', username)
-      .single();
+  try {
+    if (supabase) {
+      // Check for existing user
+      const { data: existing, error: checkError } = await supabase
+        .from('users')
+        .select('username')
+        .eq('username', username)
+        .maybeSingle();
 
-    if (existing) {
-      return res.status(400).json({ error: '该用户名已被占用' });
-    }
+      if (checkError) throw checkError;
+      if (existing) {
+        return res.status(400).json({ error: '该用户名已被占用' });
+      }
 
-    const { data, error } = await supabase
-      .from('users')
-      .insert([{ id: randomUUID(), username, password, email: '', role: 'user' }])
-      .select()
-      .single();
+      // Insert new user
+      const { data, error } = await supabase
+        .from('users')
+        .insert([{ id: randomUUID(), username, password, email: '', role: 'user' }])
+        .select()
+        .single();
 
-    if (data) {
-      const { password: _, ...userWithoutPassword } = data as any;
-      return res.json({ success: true, user: userWithoutPassword });
+      if (error) throw error;
+
+      if (data) {
+        const { password: _, ...userWithoutPassword } = data as any;
+        return res.json({ success: true, user: userWithoutPassword });
+      }
     }
-  } else {
-    if (LOCAL_USERS.find(u => u.username === username)) {
-      return res.status(400).json({ error: '该用户名已被占用' });
-    }
-    const newUser = { id: randomUUID(), username, password, email: '', role: 'user' };
-    LOCAL_USERS.push(newUser);
-    const { password: _, ...userWithoutPassword } = newUser;
-    return res.json({ success: true, user: userWithoutPassword });
+  } catch (err: any) {
+    console.error('Supabase Register Error:', err.message);
+    if (err.code === '23505') return res.status(400).json({ error: '该用户名已被占用' });
   }
-  
-  res.status(500).json({ error: '注册失败' });
+
+  // Fallback if Supabase fails
+  if (LOCAL_USERS.find(u => u.username === username)) {
+    return res.status(400).json({ error: '该用户名已被占用' });
+  }
+  const newUser = { id: randomUUID(), username, password, email: '', role: 'user' };
+  LOCAL_USERS.push(newUser);
+  const { password: _, ...userWithoutPassword } = newUser;
+  return res.json({ success: true, user: userWithoutPassword });
 };
 
 app.all(['/api/login', '/login'], handleLogin);
 app.all(['/api/register', '/register'], handleRegister);
 
 app.get('/api/materials', async (req, res) => {
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('materials')
-      .select('*')
-      .order('lastModified', { ascending: false });
-    return res.json(data || []);
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('materials')
+        .select('*')
+        .order('last_modified', { ascending: false });
+      
+      if (error) throw error;
+      
+      // 映射数据库字段名为前端所需的驼峰式 (如果需要)
+      const formatted = (data || []).map(m => ({
+        id: m.id,
+        title: m.title,
+        audioUrl: m.audio_url,
+        script: m.script,
+        segments: m.segments || [],
+        lastModified: m.last_modified
+      }));
+      
+      return res.json(formatted);
+    }
+  } catch (err: any) {
+    console.error('Fetch Materials Error:', err.message);
   }
   res.json(LOCAL_STORE);
 });
@@ -195,36 +218,44 @@ app.post('/api/materials/sync', async (req, res) => {
     return res.status(400).json({ error: 'Invalid materials data' });
   }
 
-  if (supabase) {
-    // Upsert materials one by one or in batch
-    // To keep it simple and robust, we use upsert
-    const { error } = await supabase
-      .from('materials')
-      .upsert(materials.map(m => ({
+  try {
+    if (supabase) {
+      const records = materials.map(m => ({
         id: m.id,
-        title: m.title,
-        audioUrl: m.audioUrl,
-        script: m.script,
-        segments: m.segments,
-        lastModified: m.lastModified
-      })));
+        title: m.title || 'Untitled',
+        audio_url: m.audioUrl,
+        script: m.script || '',
+        segments: Array.isArray(m.segments) ? m.segments : [],
+        last_modified: m.lastModified || Date.now()
+      }));
 
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ success: true, count: materials.length });
-  } else {
-    materials.forEach(newM => {
-      const index = LOCAL_STORE.findIndex(m => m.id === newM.id);
-      if (index !== -1) {
-        if (newM.lastModified > LOCAL_STORE[index].lastModified) {
-          LOCAL_STORE[index] = newM;
-        }
-      } else {
-        LOCAL_STORE.push(newM);
+      const { error } = await supabase
+        .from('materials')
+        .upsert(records, { onConflict: 'id' });
+
+      if (error) {
+        console.error('Supabase Sync Error:', error);
+        throw error;
       }
-    });
-    LOCAL_STORE.sort((a, b) => b.lastModified - a.lastModified);
-    res.json({ success: true, count: LOCAL_STORE.length });
+      return res.json({ success: true, count: materials.length, source: 'supabase' });
+    }
+  } catch (err: any) {
+    console.error('Sync Fallback triggered:', err.message);
   }
+
+  // Fallback to local memory if Supabase fails
+  materials.forEach(newM => {
+    const index = LOCAL_STORE.findIndex(m => m.id === newM.id);
+    if (index !== -1) {
+      if (newM.lastModified > LOCAL_STORE[index].lastModified) {
+        LOCAL_STORE[index] = newM;
+      }
+    } else {
+      LOCAL_STORE.push(newM);
+    }
+  });
+  LOCAL_STORE.sort((a, b) => b.lastModified - a.lastModified);
+  res.json({ success: true, count: LOCAL_STORE.length, source: 'memory' });
 });
 
 app.delete('/api/materials/:id', async (req, res) => {
