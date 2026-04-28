@@ -1,9 +1,8 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.py" },
-    { "source": "/health", "destination": "/api/index.py" },
-    { "source": "/login", "destination": "/api/index.py" },
-    { "source": "/materials/:path*", "destination": "/api/index.py" },
-    { "source": "/materials", "destination": "/api/index.py" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.py"
+    }
   ]
 }
