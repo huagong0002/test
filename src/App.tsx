@@ -13,7 +13,7 @@ const getApiBase = () => {
   return ""; 
 };
 
-const API_BASE = getApiBase();
+const API_BASE = "/api";;
 // 调试日志，帮助确定当前请求目标
 console.log(`[API Config] Target Base: "${API_BASE || 'Relative'}"`);
 import { useState, useRef, useEffect, useMemo } from 'react';
