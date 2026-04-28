@@ -6,7 +6,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 
 @app.route('/login', methods=['POST'])
-@app.route('/api/login', methods=['POST']) # 双重保险
+
 def login():
     # 你的逻辑
     
