@@ -5,6 +5,18 @@ from flask_cors import CORS
 # 初始化 Flask 实例，变量名必须为 app
 app = Flask(__name__)
 
+# 以健康检查为例
+@app.route('/health', methods=['GET'])
+@app.route('/api/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"})
+
+# 以登录为例
+@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
+def login():
+    # ... 逻辑 ...
+    
 # 配置跨域，允许所有来源及特定 Header，确保子域名调用不被拦截
 CORS(app, resources={r"/*": {
     "origins": "*",
