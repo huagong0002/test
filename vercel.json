@@ -13,11 +13,15 @@
       "destination": "/api/index.py"
     },
     {
-      "source": "/materials/(.*)",
+      "source": "/materials/:path*",
       "destination": "/api/index.py"
     },
     {
       "source": "/materials",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/register",
       "destination": "/api/index.py"
     }
   ]
