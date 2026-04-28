@@ -44,13 +44,18 @@ if (!supabase) {
 app.set('trust proxy', true);
 
 // 1. Basic Middlewares
+// Simplified CORS for maximum compatibility with subdomains
 app.use(cors({
   origin: true,
-  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 app.use(express.json({ limit: '50mb' }));
+
+// Handle OPTIONS preflight explicitly for older browsers/proxies
+app.options('*', cors());
 
 // 2. Logger Middleware
 app.use((req, res, next) => {

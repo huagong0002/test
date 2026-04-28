@@ -1,10 +1,14 @@
 // 自动检测 API 基础路径
 const getApiBase = () => {
-  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  if (typeof window === 'undefined') return "";
+  const host = window.location.hostname;
+  const protocol = window.location.protocol;
+  
   // 如果在指定的子域名下，强制指向主域名后端
-  if (host === 'test.sd-education.online' || host === 'listening.sd-education.online') {
-    return "https://www.sd-education.online";
+  if (host === 'test.sd-education.online' || host === 'listening.sd-education.online' || host === 'echo.sd-education.online') {
+    return `${protocol}//www.sd-education.online`;
   }
+  
   // 在 AI Studio 预览环境或本地开发时，使用相对路径
   return ""; 
 };
@@ -222,14 +226,13 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Authentication Handlers
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
     const timestamp = Date.now();
     const apiUrl = `${API_BASE}/api/login?t=${timestamp}`;
     console.log(`--- Attempting Login ---`);
-    console.log(`Fetching from: ${apiUrl}`);
+    console.log(`Target: ${apiUrl}`);
     
     try {
       const res = await fetch(apiUrl, {
@@ -241,44 +244,41 @@ export default function App() {
         body: JSON.stringify({ 
           username: authData.username.trim(), 
           password: authData.password 
-        })
+        }),
+        mode: 'cors'
       });
       
       const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
+      if (res.ok && contentType && contentType.includes('application/json')) {
         const data = await res.json();
-        if (res.ok) {
-          console.log('Login Success:', data.user.username);
-            setUser(data.user);
-            localStorage.setItem('echomaster_user', JSON.stringify(data.user));
-          } else {
-            console.warn('Login Rejected:', data.error);
-            // 确保 errorMessage 永远是字符串，防止 React Error #31
-            const errObj = data.error || data;
-            const errorMessage = typeof errObj === 'string' 
-              ? errObj 
-              : (errObj.message || JSON.stringify(errObj));
-            setAuthError(errorMessage);
+        console.log('Login Success:', data.user.username);
+        setUser(data.user);
+        localStorage.setItem('echomaster_user', JSON.stringify(data.user));
+      } else {
+        // Handle failure cases (JSON error or HTML 404/500)
+        let errorMsg = `连接失败 (状态码: ${res.status})`;
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const data = await res.json();
+            const errDetail = data.error || data.message || data;
+            errorMsg = typeof errDetail === 'string' ? errDetail : JSON.stringify(errDetail);
+          } catch (e) {
+            console.error("Failed to parse JSON error", e);
           }
         } else {
           const text = await res.text();
-          console.error('Login Error Response:', {
-            status: res.status,
-            contentType,
-            bodyStart: text.substring(0, 100)
-          });
-          
+          console.warn('Backend returned non-JSON:', text.substring(0, 100));
           if (res.status === 404) {
-            setAuthError(`登录失败 (404): 接口未找到。请检查后端服务是否在 ${API_BASE || '当前域名'} 运行。`);
-          } else {
-            setAuthError(`服务器错误 (${res.status}): 请联系管理员。`);
+            errorMsg = `接口地址未找到 (404)。请确保后端服务在 ${API_BASE || '当前主域名'} 正常运行。`;
           }
         }
+        
+        setAuthError(errorMsg);
+      }
     } catch (err: any) {
       console.error('CRITICAL: Login Network Error', err);
-      const targetUrl = `${API_BASE || window.location.origin}/api/login`;
-      console.error(`Failed target: ${targetUrl}`);
-      setAuthError(`网络连接失败: ${err.message || '未知错误'}。 请求地址: ${targetUrl}`);
+      setAuthError(`网络请求失败: ${err.message || '请检查您的网络连接或后端跨域配置'}`);
     }
   };
 
@@ -288,6 +288,7 @@ export default function App() {
     const timestamp = Date.now();
     const apiUrl = `${API_BASE}/api/register?t=${timestamp}`;
     console.log('--- Attempting Register ---');
+    
     try {
       const res = await fetch(apiUrl, {
         method: 'POST',
@@ -298,36 +299,34 @@ export default function App() {
         body: JSON.stringify({ 
           username: authData.username.trim(), 
           password: authData.password 
-        })
+        }),
+        mode: 'cors'
       });
       
       const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
+      if (res.ok && contentType && contentType.includes('application/json')) {
         const data = await res.json();
-        if (res.ok) {
-          console.log('Register Success:', data.user.username);
-          setUser(data.user);
-          localStorage.setItem('echomaster_user', JSON.stringify(data.user));
-        } else {
-          console.warn('Register Rejected:', data.error);
-          const errObj = data.error || data;
-          const errorMessage = typeof errObj === 'string' 
-            ? errObj 
-            : (errObj.message || JSON.stringify(errObj));
-          setAuthError(errorMessage);
-        }
+        console.log('Register Success:', data.user.username);
+        setUser(data.user);
+        localStorage.setItem('echomaster_user', JSON.stringify(data.user));
       } else {
-        const text = await res.text();
-        console.error('Register Non-JSON response:', {
-          status: res.status,
-          bodyStart: text.substring(0, 50)
-        });
-        setAuthError(`注册失败 (${res.status}): 接口不可用。`);
+        let errorMsg = `注册失败 (状态码: ${res.status})`;
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const data = await res.json();
+            const errDetail = data.error || data.message || data;
+            errorMsg = typeof errDetail === 'string' ? errDetail : JSON.stringify(errDetail);
+          } catch (e) {
+            console.error("Failed to parse JSON error", e);
+          }
+        }
+        
+        setAuthError(errorMsg);
       }
     } catch (err: any) {
       console.error('CRITICAL: Register Network Error', err);
-      const targetUrl = `${API_BASE || window.location.origin}/api/register`;
-      setAuthError(`注册失败: ${err.message || '无法连接服务器'}。 地址: ${targetUrl}`);
+      setAuthError(`注册异常: ${err.message || '无法连接到服务器'}`);
     }
   };
 
