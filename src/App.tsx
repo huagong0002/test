@@ -4,18 +4,18 @@ const getApiBase = () => {
   const host = window.location.hostname;
   
   // 如果你在 sd-education.online 的任何子域名下（如 test, listening, echo）
-  // 且你明确知道后端在 www 主域运行，则指向主域
+  // 我们强制指向主域名后端 https://www.sd-education.online
   if (host.includes('sd-education.online') && !host.startsWith('www.')) {
     return "https://www.sd-education.online";
   }
   
-  // 如果是 localhost 或已经在 www.sd-education.online 上，或者在 AI Studio 预览环境
-  // 则使用相对路径
+  // 在 AI Studio 预览环境、localhost 或已经在 www 上时使用相对路径
   return ""; 
 };
 
 const API_BASE = getApiBase();
-console.log(`[API Config] Host: ${typeof window !== 'undefined' ? window.location.hostname : 'SSR'}, API_BASE: "${API_BASE}"`);
+// 调试日志，帮助确定当前请求目标
+console.log(`[API Config] Target Base: "${API_BASE || 'Relative'}"`);
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Play, 
@@ -171,7 +171,9 @@ export default function App() {
           await fetch(`${API_BASE}/api/materials/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ materials })
+            body: JSON.stringify({ materials }),
+            mode: 'cors',
+            credentials: API_BASE ? 'include' : 'same-origin'
           });
           localStorage.setItem('echomaster_library', JSON.stringify(materials));
         } catch (e: any) {
@@ -235,7 +237,11 @@ export default function App() {
     e.stopPropagation();
     if (window.confirm('确定要删除这个听力任务吗？（这将同步删除云端数据）')) {
       try {
-        await fetch(`${API_BASE}/api/materials/${id}`, { method: 'DELETE' });
+        await fetch(`${API_BASE}/api/materials/${id}`, { 
+          method: 'DELETE',
+          mode: 'cors',
+          credentials: API_BASE ? 'include' : 'same-origin'
+        });
         setMaterials(prev => prev.filter(m => m.id !== id));
         if (currentMaterialId === id) setCurrentMaterialId(null);
       } catch (e) {
@@ -363,11 +369,13 @@ export default function App() {
   useEffect(() => {
     const checkServer = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/health`);
+        const res = await fetch(`${API_BASE}/api/health`, {
+          mode: 'cors',
+          credentials: API_BASE ? 'include' : 'same-origin'
+        });
         if (res.ok) console.log("Server health check passed");
       } catch (e: any) {
         console.error("Server health check FAILED.", e);
-        console.error(`Check URL: ${API_BASE || window.location.origin}/api/health`);
       }
     };
     checkServer();

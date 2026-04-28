@@ -44,17 +44,27 @@ if (!supabase) {
 app.set('trust proxy', true);
 
 // 1. Basic Middlewares
-// 极致兼容的跨域处理 (直接注入 Header)
+// 极致兼容的跨域处理 (支持子域名 Cookie 共享与凭证)
 app.use((req, res, next) => {
   const origin = req.get('Origin');
-  if (origin && (origin.includes('sd-education.online') || origin.includes('localhost'))) {
+  
+  // 允许所有 sd-education.online 的子域名
+  const isTrustedOrigin = origin && (
+    origin.endsWith('sd-education.online') || 
+    origin.includes('localhost')
+  );
+
+  if (isTrustedOrigin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else {
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
+
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin, Cookie');
+  res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
+
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
