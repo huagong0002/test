@@ -674,7 +674,7 @@ export default function App() {
                   </button>
                 </div>
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20 overflow-hidden border border-white/10">
-                  {user.role === 'admin' ? <Settings2 size={20} /> : <User size={20} />}
+                  {user?.role === 'admin' ? <Settings2 size={20} /> : <User size={20} />}
                 </div>
               </div>
             )}
