@@ -109,7 +109,7 @@ export default function App() {
         }
       } catch (e: any) {
         console.error("Backend Library Load Error", e);
-        console.error(`Attempted URL: ${API_BASE || window.location.origin}/api/materials`);
+        console.error(`Attempted URL: ${API_BASE || window.location.origin}/materials`);
         // Fallback to localStorage if backend fails
         const savedLibrary = localStorage.getItem('echomaster_library');
         if (savedLibrary) setMaterials(JSON.parse(savedLibrary));
@@ -132,7 +132,7 @@ export default function App() {
         }
       } catch (e) {
         console.error("Server health check FAILED.", e);
-        console.error(`Check URL: ${API_BASE || window.location.origin}/api/health`);
+        console.error(`Check URL: ${API_BASE || window.location.origin}/health`);
       }
     };
     checkHealth();
@@ -178,7 +178,7 @@ export default function App() {
           localStorage.setItem('echomaster_library', JSON.stringify(materials));
         } catch (e: any) {
           console.error("Backend Sync Error", e);
-          console.error(`Attempted sync URL: ${API_BASE || window.location.origin}/api/materials/sync`);
+          console.error(`Attempted sync URL: ${API_BASE || window.location.origin}/materials/sync`);
         }
       }
     };
