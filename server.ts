@@ -76,6 +76,7 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     supabaseConnected: !!supabase,
+    env: process.env.NODE_ENV,
     serverTime: new Date().toISOString() 
   });
 });
@@ -213,6 +214,16 @@ app.delete('/api/materials/:id', async (req, res) => {
     LOCAL_STORE = LOCAL_STORE.filter(m => m.id !== id);
   }
   res.json({ success: true });
+});
+
+// API 404 handler - MUST be before the Vite/Static fallback
+app.all('/api/*', (req, res) => {
+  console.warn(`[API 404] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ 
+    error: 'API 接口不存在', 
+    method: req.method,
+    path: req.originalUrl 
+  });
 });
 
 // Vite middleware for development

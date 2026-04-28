@@ -35,6 +35,18 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Safe ID generation fallback
+function generateId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try {
+      return crypto.randomUUID();
+    } catch (e) {
+      // Fallback if randomUUID fails for some reason
+    }
+  }
+  return Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+}
+
 export default function App() {
   const [user, setUser] = useState<UserType | null>(null);
   const [authForm, setAuthForm] = useState<'login' | 'register'>('login');
@@ -45,7 +57,7 @@ export default function App() {
   const [currentMaterialId, setCurrentMaterialId] = useState<string | null>(null);
   const [materials, setMaterials] = useState<ListeningMaterial[]>([]);
   const [material, setMaterial] = useState<ListeningMaterial>({
-    id: crypto.randomUUID(),
+    id: generateId(),
     title: '未命名听力材料',
     audioUrl: null,
     script: '',
@@ -162,7 +174,7 @@ export default function App() {
 
   const createNewMaterial = () => {
     const newMaterial: ListeningMaterial = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       title: `新听力材料 ${materials.length + 1}`,
       audioUrl: null,
       script: '',
@@ -224,7 +236,10 @@ export default function App() {
           localStorage.setItem('echomaster_user', JSON.stringify(data.user));
         } else {
           console.warn('Login Rejected:', data.error);
-          setAuthError(data.error);
+          const errorMessage = typeof data.error === 'string' 
+            ? data.error 
+            : (data.error?.message || data.message || JSON.stringify(data.error || data));
+          setAuthError(errorMessage);
         }
       } else {
         const text = await res.text();
@@ -358,8 +373,9 @@ export default function App() {
 
   // Auto-segmentation helper (based on time markers in text like [00:12])
   const extractSegmentsFromScript = () => {
+    const script = material.script || '';
     const regex = /\[(\d{1,2}):(\d{2})\]/g;
-    const matches = Array.from(material.script.matchAll(regex));
+    const matches = Array.from(script.matchAll(regex));
     if (matches.length === 0) return;
 
     const newSegments: AudioSegment[] = matches.map((match, index) => {
@@ -371,11 +387,11 @@ export default function App() {
       
       // Get text between this timestamp and next
       const startIndex = match.index! + match[0].length;
-      const endIndex = nextMatch ? nextMatch.index : material.script.length;
-      const content = material.script.substring(startIndex, endIndex).trim();
+      const endIndex = nextMatch ? nextMatch.index : script.length;
+      const content = script.substring(startIndex, endIndex).trim();
 
       return {
-        id: crypto.randomUUID(),
+        id: generateId(),
         label: `题目 ${index + 1}`,
         startTime: startSec,
         endTime: endSec,
@@ -451,6 +467,8 @@ export default function App() {
 
   // Helper to render script with highlighting
   const renderTranscript = (onlyActive: boolean = false) => {
+    if (!material || !Array.isArray(material.segments)) return null;
+
     let items = material.segments.map((seg, idx) => ({
       index: idx,
       text: seg.subtitle || '',
@@ -477,12 +495,12 @@ export default function App() {
       <div className={cn("flex flex-col w-full", onlyActive ? "gap-4" : "gap-12 py-10")}>
         {items.map((item, idx) => {
           const isActive = onlyActive ? true : item.index === activeSegmentIndex;
-          const words = item.text.split(/\s+/);
+          const text = item.text || '';
           const duration = item.endTime - item.startTime;
           
           return (
             <motion.div 
-              key={item.index}
+              key={`${item.index}-${idx}`}
               data-segment-index={item.index}
               initial={false}
               animate={{ 
@@ -497,16 +515,16 @@ export default function App() {
               )}
             >
               <div className="space-y-2 whitespace-pre-wrap">
-                {item.text.split('\n').map((line, lIdx) => (
+                {text.split('\n').map((line, lIdx) => (
                   <div key={lIdx} className="flex flex-wrap gap-x-2 gap-y-1.5">
-                    {line.split(/\s+/).map((word, wIdx) => {
+                    {(line.trim() ? line.split(/\s+/) : []).map((word, wIdx) => {
                       let isWordActive = false;
-                      const totalWordsBefore = item.text.split('\n').slice(0, lIdx).join(' ').split(/\s+/).filter(Boolean).length;
+                      const totalWordsBefore = text.split('\n').slice(0, lIdx).join(' ').split(/\s+/).filter(Boolean).length;
                       
                       if (isActive && duration > 0) {
                         const elapsed = currentTime - item.startTime;
                         // Approximate word progress relative to whole segment text
-                        const totalWords = item.text.split(/\s+/).filter(Boolean).length;
+                        const totalWords = text.split(/\s+/).filter(Boolean).length;
                         const wordTime = (elapsed / duration) * totalWords;
                         isWordActive = (totalWordsBefore + wIdx) <= wordTime;
                       }
@@ -1005,15 +1023,16 @@ export default function App() {
                     <div className="flex gap-2">
                       <button 
                         onClick={() => {
+                          const segments = material.segments || [];
                           const newSeg = {
-                            id: crypto.randomUUID(),
-                            label: `题目 ${material.segments.length + 1}`,
+                            id: generateId(),
+                            label: `题目 ${segments.length + 1}`,
                             startTime: currentTime,
                             endTime: Math.min(currentTime + 5, duration),
                             subtitle: ''
                           };
-                          setMaterial(prev => ({ ...prev, segments: [...prev.segments, newSeg] }));
-                          setEditingSegmentIndex(material.segments.length);
+                          setMaterial(prev => ({ ...prev, segments: [...(prev.segments || []), newSeg] }));
+                          setEditingSegmentIndex(segments.length);
                         }}
                         className="w-10 h-10 bg-blue-600/20 text-blue-400 border border-blue-500/20 rounded-xl flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"
                       >
@@ -1023,13 +1042,13 @@ export default function App() {
                   </div>
                   
                   <div className="flex-grow overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                    {material.segments.length === 0 ? (
+                    {(!material.segments || material.segments.length === 0) ? (
                       <div className="h-full flex flex-col items-center justify-center text-slate-600 opacity-50 space-y-3">
                         <Clock size={32} />
                         <p className="text-xs font-bold uppercase tracking-widest">暂无分段，请新增</p>
                       </div>
                     ) : (
-                      material.segments.map((seg, idx) => (
+                      Array.isArray(material.segments) && material.segments.map((seg, idx) => (
                         <div 
                           key={seg.id}
                           onClick={() => setEditingSegmentIndex(idx)}
@@ -1281,7 +1300,7 @@ export default function App() {
                       <ListMusic size={16} className="text-blue-500" /> 题目库
                     </h3>
                     <div className="space-y-2 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
-                      {material.segments.map((seg, idx) => (
+                      {Array.isArray(material.segments) && material.segments.map((seg, idx) => (
                         <button 
                           key={seg.id}
                           onClick={() => {
