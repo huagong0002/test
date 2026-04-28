@@ -2,19 +2,20 @@
 const getApiBase = () => {
   if (typeof window === 'undefined') return "";
   const host = window.location.hostname;
-  const protocol = window.location.protocol;
   
-  // 如果你在 test/listening/echo 等子域名下，且你明确知道后端在 www 的 Node 环境运行
+  // 如果你在 sd-education.online 的任何子域名下（如 test, listening, echo）
+  // 且你明确知道后端在 www 主域运行，则指向主域
   if (host.includes('sd-education.online') && !host.startsWith('www.')) {
-    // 强制使用 https 协议指向主域
     return "https://www.sd-education.online";
   }
   
-  // AI Studio 预览环境或其他环境使用相对路径
+  // 如果是 localhost 或已经在 www.sd-education.online 上，或者在 AI Studio 预览环境
+  // 则使用相对路径
   return ""; 
 };
 
 const API_BASE = getApiBase();
+console.log(`[API Config] Host: ${typeof window !== 'undefined' ? window.location.hostname : 'SSR'}, API_BASE: "${API_BASE}"`);
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Play, 
@@ -87,7 +88,10 @@ export default function App() {
   useEffect(() => {
     const fetchLibrary = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/materials`);
+        const response = await fetch(`${API_BASE}/api/materials`, {
+          mode: 'cors',
+          credentials: API_BASE ? 'include' : 'same-origin'
+        });
         const contentType = response.headers.get('content-type');
         
         if (response.ok && contentType && contentType.includes('application/json')) {
@@ -118,7 +122,9 @@ export default function App() {
     const checkHealth = async () => {
       try {
         const checkUrl = `${API_BASE}/api/health`;
-        const res = await fetch(checkUrl);
+        const res = await fetch(checkUrl, { 
+          mode: 'cors'
+        });
         console.log(`Server health check: ${res.status} ${res.statusText}`);
         if (res.ok) {
           const data = await res.json();

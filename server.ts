@@ -44,33 +44,20 @@ if (!supabase) {
 app.set('trust proxy', true);
 
 // 1. Basic Middlewares
-// 工业级标准的跨域处理 (使用插件 + 手动补充，确保万无一失)
-const corsOptions = {
-  origin: function (origin: string | undefined, callback: any) {
-    // 允许没有 Origin 的请求 (比如移动端或 Postman)
-    if (!origin) return callback(null, true);
-    
-    // 允许 localhost 和所有 sd-education.online 的子域名
-    if (origin.includes('sd-education.online') || origin.includes('localhost') || origin.includes('vercel.app')) {
-      callback(null, true);
-    } else {
-      // 生产环境如果遇到未知 Origin，我们也暂时放行以保证可用性，但在控制台记录警告
-      console.warn(`[CORS Warning] Unknown origin attempted to connect: ${origin}`);
-      callback(null, true);
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'Origin', 'X-JSON'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-};
-
-app.use(cors(corsOptions));
-
-// 手动兜底：确保即使在错误路径下也存在基本的 CORS Header
+// 极致兼容的跨域处理 (直接注入 Header)
 app.use((req, res, next) => {
-  res.header('X-CORS-Processed', 'true');
+  const origin = req.get('Origin');
+  if (origin && (origin.includes('sd-education.online') || origin.includes('localhost'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
   next();
 });
 
