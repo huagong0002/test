@@ -139,8 +139,8 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materials]);
-
-  // --- 4. 编辑回填逻辑：将当前编辑的 material 同步到 materials 列表中 ---
+  
+  // --- 修正后的唯一回填逻辑 ---
   useEffect(() => {
     if (!material || !material.id) return;
 
@@ -150,12 +150,10 @@ export default function App() {
         if (index === -1) return prev;
 
         const existing = prev[index];
-        // 性能优化：仅当内容真正变化时才触发列表更新
-        if (
-          existing.title === material.title &&
-          existing.script === material.script &&
-          existing.segments?.length === material.segments?.length
-        ) {
+        // 性能优化：仅内容变化时更新，防止死循环
+        if (existing.title === material.title && 
+            existing.script === material.script &&
+            JSON.stringify(existing.segments) === JSON.stringify(material.segments)) {
           return prev;
         }
 
@@ -163,6 +161,7 @@ export default function App() {
         newList[index] = { ...material, lastModified: Date.now() };
         return newList;
       });
+      setLastSaved(new Date().toLocaleTimeString());
     }, 1000);
 
     return () => clearTimeout(timer);
