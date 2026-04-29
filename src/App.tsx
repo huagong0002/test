@@ -157,7 +157,7 @@ export default function App() {
           await fetch(`/api/materials/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ materials }),
+            body: JSON.stringify({ materials:materials }),
             mode: 'cors',
             credentials: 'same-origin'
           });
