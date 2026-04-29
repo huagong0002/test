@@ -1,0 +1,340 @@
+import express from 'express';
+import { createServer as createViteServer } from 'vite';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { randomUUID } from 'node:crypto';
+import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = 3000;
+
+// Supabase Initialization
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
+
+let supabase: any = null;
+
+try {
+  if (supabaseUrl && supabaseKey && !supabaseUrl.includes('your-project.supabase.co')) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+    console.log('✅ Supabase Client Initialized');
+  }
+} catch (error) {
+  console.error('❌ Supabase Init Error:', error);
+}
+
+// 0. Trust Proxy for Cloudflare/Load Balancers
+app.set('trust proxy', true);
+
+// 1. Basic Middlewares
+// 极其强力的跨域处理，确保所有子域名都能正常访问
+app.use((req, res, next) => {
+  const origin = req.get('Origin');
+  
+  if (origin) {
+    // 只要来源包含 sd-education.online，就反射该来源并允许凭证
+    if (origin.includes('sd-education.online') || origin.includes('localhost')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      // 其他来源允许跨域请求，但不能带凭证
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+  } else {
+    // 非浏览器请求或同源请求
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin, Cookie, X-JSON');
+  res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie, Content-Length');
+
+  // 预检请求直接拦截返回
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
+
+app.use(express.json({ limit: '50mb' }));
+
+// 2. Logger Middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  console.log(`[REQ] ${req.method} ${req.url}`);
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[RES] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
+
+// In-memory Fallback (for local dev without supabase)
+let LOCAL_STORE: any[] = [];
+let LOCAL_USERS: any[] = [
+  { id: '1', username: 'admin', password: 'admin123', email: 'admin@e-listen.com', role: 'admin' },
+  { id: '2', username: 'tester', password: 'password', email: 'tester@example.com', role: 'user' }
+];
+
+// 3. API Routes
+app.get('/ping', (req, res) => res.send('pong'));
+app.get('/api', (req, res) => {
+  res.json({ 
+    message: 'E-Listen API Server',
+    endpoints: [
+      '/api/health',
+      '/api/materials',
+      '/api/login',
+      '/api/register'
+    ]
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    supabaseConnected: !!supabase,
+    env: process.env.NODE_ENV,
+    serverTime: new Date().toISOString(),
+    corsOrigin: req.get('Origin') || 'None'
+  });
+});
+
+app.get('/api/cors-test', (req, res) => {
+  res.json({ 
+    message: 'CORS is working', 
+    origin: req.get('Origin'),
+    headers: req.headers
+  });
+});
+
+app.get('/debug/host', (req, res) => {
+  res.json({
+    host: req.get('host'),
+    origin: req.get('origin'),
+    headers: req.headers,
+    env: process.env.NODE_ENV,
+    url: req.url
+  });
+});
+
+const handleLogin = async (req, res) => {
+  const { username, password } = req.method === 'GET' ? req.query : req.body;
+  
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        const { password: _, ...userWithoutPassword } = data as any;
+        return res.json({ success: true, user: userWithoutPassword });
+      }
+    }
+  } catch (err: any) {
+    console.error('Supabase Login Error:', err.message);
+  }
+
+  // Fallback to local
+  const user = LOCAL_USERS.find(u => u.username === username && u.password === password);
+  if (user) {
+    const { password: _, ...userWithoutPassword } = user;
+    return res.json({ success: true, user: userWithoutPassword });
+  }
+  
+  res.status(401).json({ error: '用户名或密码错误' });
+};
+
+const handleRegister = async (req, res) => {
+  const { username, password } = req.body;
+  
+  try {
+    if (supabase) {
+      // Check for existing user
+      const { data: existing, error: checkError } = await supabase
+        .from('users')
+        .select('username')
+        .eq('username', username)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+      if (existing) {
+        return res.status(400).json({ error: '该用户名已被占用' });
+      }
+
+      // Insert new user
+      const { data, error } = await supabase
+        .from('users')
+        .insert([{ id: randomUUID(), username, password, email: '', role: 'user' }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const { password: _, ...userWithoutPassword } = data as any;
+        return res.json({ success: true, user: userWithoutPassword });
+      }
+    }
+  } catch (err: any) {
+    console.error('Supabase Register Error:', err.message);
+    if (err.code === '23505') return res.status(400).json({ error: '该用户名已被占用' });
+  }
+
+  // Fallback if Supabase fails
+  if (LOCAL_USERS.find(u => u.username === username)) {
+    return res.status(400).json({ error: '该用户名已被占用' });
+  }
+  const newUser = { id: randomUUID(), username, password, email: '', role: 'user' };
+  LOCAL_USERS.push(newUser);
+  const { password: _, ...userWithoutPassword } = newUser;
+  return res.json({ success: true, user: userWithoutPassword });
+};
+
+app.all(['/api/login', '/login'], handleLogin);
+app.all(['/api/register', '/register'], handleRegister);
+
+app.get('/api/materials', async (req, res) => {
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('materials')
+        .select('*')
+        .order('last_modified', { ascending: false });
+      
+      if (error) throw error;
+      
+      // 映射数据库字段名为前端所需的驼峰式 (如果需要)
+      const formatted = (data || []).map(m => ({
+        id: m.id,
+        title: m.title,
+        audioUrl: m.audio_url,
+        script: m.script,
+        segments: m.segments || [],
+        lastModified: m.last_modified
+      }));
+      
+      return res.json(formatted);
+    }
+  } catch (err: any) {
+    console.error('Fetch Materials Error:', err.message);
+  }
+  res.json(LOCAL_STORE);
+});
+
+app.post('/api/materials/sync', async (req, res) => {
+  const { materials } = req.body;
+  if (!Array.isArray(materials)) {
+    return res.status(400).json({ error: 'Invalid materials data' });
+  }
+
+  try {
+    if (supabase) {
+      const records = materials.map(m => ({
+        id: m.id,
+        title: m.title || 'Untitled',
+        audio_url: m.audioUrl,
+        script: m.script || '',
+        segments: Array.isArray(m.segments) ? m.segments : [],
+        last_modified: m.lastModified || Date.now()
+      }));
+
+      const { error } = await supabase
+        .from('materials')
+        .upsert(records, { onConflict: 'id' });
+
+      if (error) {
+        console.error('Supabase Sync Error:', error);
+        throw error;
+      }
+      return res.json({ success: true, count: materials.length, source: 'supabase' });
+    }
+  } catch (err: any) {
+    console.error('Sync Fallback triggered:', err.message);
+  }
+
+  // Fallback to local memory if Supabase fails
+  materials.forEach(newM => {
+    const index = LOCAL_STORE.findIndex(m => m.id === newM.id);
+    if (index !== -1) {
+      if (newM.lastModified > LOCAL_STORE[index].lastModified) {
+        LOCAL_STORE[index] = newM;
+      }
+    } else {
+      LOCAL_STORE.push(newM);
+    }
+  });
+  LOCAL_STORE.sort((a, b) => b.lastModified - a.lastModified);
+  res.json({ success: true, count: LOCAL_STORE.length, source: 'memory' });
+});
+
+app.delete('/api/materials/:id', async (req, res) => {
+  const { id } = req.params;
+  if (supabase) {
+    await supabase.from('materials').delete().eq('id', id);
+  } else {
+    LOCAL_STORE = LOCAL_STORE.filter(m => m.id !== id);
+  }
+  res.json({ success: true });
+});
+
+// API 404 handler - MUST be before the Vite/Static fallback
+app.all('/api/*', (req, res) => {
+  console.warn(`[API 404] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ 
+    error: 'API 接口不存在', 
+    method: req.method,
+    path: req.originalUrl 
+  });
+});
+
+// Vite middleware for development
+async function setupVite() {
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+}
+
+// Initializing the server environment
+setupVite().catch(err => {
+  console.error('Failed to setup Vite:', err);
+});
+
+// Export for Vercel
+export default app;
+
+// Listen only if not in Vercel
+const isVercel = process.env.VERCEL === '1' || !!process.env.NOW_REGION;
+const shouldListen = !isVercel && (process.env.NODE_ENV !== 'production' || process.env.RENDER || process.env.K_SERVICE || process.env.PORT);
+
+if (shouldListen) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running locally on http://localhost:${PORT}`);
+  });
+} else if (isVercel) {
+  console.log('🚀 Server starting in Vercel Serverless environment');
+}
+
