@@ -613,7 +613,11 @@ export default function App() {
                   </span>
                 )}
                 <button 
-                  onClick={syncToBackend}
+                  onClick={(e) => {
+                    e.peventDefault();
+                    setMaterials(prev => prev.map(m => m.id === material.id ? material : m));
+                    syncToBackend();
+                  }}
                   className="btn-glass p-2.5 rounded-xl text-blue-400 hover:text-white transition-all group"
                   title="同步到库"
                 >
