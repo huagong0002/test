@@ -65,12 +65,41 @@ export default function App() {
   });
 
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  
+  // --- 1. 核心同步函数：将本地 materials 发送到 Supabase ---
+  const syncToBackend = async () => {
+    if (!materials || materials.length === 0) {
+      console.warn("列表为空，跳过同步");
+      return;
+    }
 
- // Persistence: Load library from backend on mount
+    try {
+      console.log("--- 正在发起云端同步 ---");
+      const response = await fetch('/api/materials/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // 确保发送的是当前的 materials 列表
+        body: JSON.stringify({ materials: materials }), 
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setLastSaved(`云端已同步 ${new Date().toLocaleTimeString()}`);
+        console.log("✅ 云端同步成功，受影响行数:", result.count);
+      } else {
+        const errorData = await response.json();
+        console.error("❌ 同步失败:", errorData);
+      }
+    } catch (err) {
+      console.error("❌ 网络连接异常:", err);
+    }
+  };
+
+  // --- 2. 初始化加载：页面挂载时从后端获取数据 ---
   useEffect(() => {
     const fetchLibrary = async () => {
       try {
-        console.log("--- 正在尝试从云端加载资料库 ---");
+        console.log("--- 正在从云端加载资料库 ---");
         const response = await fetch('/api/materials', {
           method: 'GET',
           headers: {
@@ -79,114 +108,65 @@ export default function App() {
           }
         });
 
-        if (!response.ok) throw new Error(`服务器异常: ${response.status}`);
+        if (!response.ok) throw new Error(`服务器响应异常: ${response.status}`);
 
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
-          // ✨ 这里的 await 现在安全了，因为它在 async fetchLibrary 内部
           const data = await response.json();
-          
           if (Array.isArray(data)) {
             setMaterials(data);
             localStorage.setItem('echomaster_library', JSON.stringify(data));
-            console.log("✅ 云端资料同步成功");
+            console.log("✅ 云端资料获取成功");
           }
         }
       } catch (e: any) {
-        console.warn("⚠️ 加载失败，启动本地兜底:", e.message);
+        console.warn("⚠️ 云端加载失败，加载本地备份:", e.message);
         const saved = localStorage.getItem('echomaster_library');
         if (saved) setMaterials(JSON.parse(saved));
       }
     };
 
     fetchLibrary();
-  }, []); // 确保这里的闭合括号正确
-
-    // Debug: Check Backend Health
-    const checkHealth = async () => {
-      try {
-        const checkUrl = `/api/health`;
-        const res = await fetch(checkUrl, { 
-          mode: 'cors'
-        });
-        console.log(`Server health check: ${res.status} ${res.statusText}`);
-        if (res.ok) {
-          const data = await res.json();
-          console.log("Server health data:", data);
-        }
-      } catch (e) {
-        console.error("Server health check FAILED.", e);
-        console.error(`Check URL: ${ window.location.origin}/api/health`);
-      }
-    };
-    checkHealth();
-    
-    // Load USER session from localStorage for serverless compatibility
-    const savedUser = localStorage.getItem('echomaster_user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        console.error("Failed to parse saved user", e);
-      }
-    }
-    
-    const savedId = localStorage.getItem('echomaster_current_id');
-    if (savedId) setCurrentMaterialId(savedId);
   }, []);
 
-  // Update effect for material selection
+  // --- 3. 自动同步逻辑：当 materials 发生变化时，延迟 2 秒自动同步 ---
   useEffect(() => {
-    if (currentMaterialId) {
-      const active = materials.find(m => m.id === currentMaterialId);
-      // Only update if the object in library is different or contains new data to avoid infinite loops
-      if (active && JSON.stringify(active) !== JSON.stringify(material)) {
-        setMaterial(active);
-      }
-      localStorage.setItem('echomaster_current_id', currentMaterialId);
+    if (materials.length > 0) {
+      const timer = setTimeout(() => {
+        syncToBackend();
+      }, 2000); // 防抖处理，避免频繁提交
+      return () => clearTimeout(timer);
     }
-  }, [currentMaterialId, materials]);
-
-  // Persistence: Sync library to backend whenever materials change
-  useEffect(() => {
-   // 🚩 修复：提取为独立函数，确保可以直接被按钮调用
-const syncToBackend = async () => {
-  // 检查是否有数据，防止空提交
-  if (!materials || materials.length === 0) {
-    console.warn("列表为空，跳过同步");
-    return;
-  }
-
-  try {
-    console.log("--- 正在发起云端同步 ---");
-    
-    // 使用相对路径，彻底移除未定义的 API_BASE
-    const response = await fetch('/api/materials/sync', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // 确保发送的是最新的 materials 状态
-      body: JSON.stringify({ materials: materials }), 
-    });
-
-    if (response.ok) {
-      const result = await response.json();
-      console.log("✅ 同步成功:", result);
-      // 可选：添加非干扰提示
-      setLastSaved(`云端已同步 ${new Date().toLocaleTimeString()}`);
-    } else {
-      const errorData = await response.json();
-      console.error("❌ 同步失败:", errorData);
-    }
-  } catch (err) {
-    console.error("❌ 网络连接异常:", err);
-  }
-};
-    
-    const timer = setTimeout(syncToBackend, 2000);
-    return () => clearTimeout(timer);
   }, [materials]);
+
+  // --- 4. 编辑回填逻辑：将当前编辑的 material 同步到 materials 列表中 ---
+  useEffect(() => {
+    if (!material || !material.id) return;
+
+    const timer = setTimeout(() => {
+      setMaterials(prev => {
+        const index = prev.findIndex(m => m.id === material.id);
+        if (index === -1) return prev;
+
+        const existing = prev[index];
+        // 性能优化：仅当内容真正变化时才触发列表更新
+        if (
+          existing.title === material.title &&
+          existing.script === material.script &&
+          existing.segments?.length === material.segments?.length
+        ) {
+          return prev;
+        }
+
+        const newList = [...prev];
+        newList[index] = { ...material, lastModified: Date.now() };
+        return newList;
+      });
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [material]);
+
 
   // Sync current material changes back to local materials list
   useEffect(() => {
