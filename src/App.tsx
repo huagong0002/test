@@ -246,7 +246,7 @@ export default function App() {
           const text = await res.text();
           console.warn('Backend returned non-JSON:', text.substring(0, 100));
           if (res.status === 404) {
-            errorMsg = `接口地址未找到 (404)。请确保后端服务在 ${API_BASE || '当前主域名'} 正常运行。`;
+            errorMsg = `接口地址未找到 (404)。请确保后端服务在 '当前主域名'} 正常运行。`;
           }
         }
         setAuthError(errorMsg);
