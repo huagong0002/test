@@ -169,22 +169,41 @@ export default function App() {
   // Persistence: Sync library to backend whenever materials change
   useEffect(() => {
     const syncToBackend = async () => {
-      if (materials.length > 0) {
-        try {
-          await fetch(`/api/materials/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ materials:dataToSync }),
-            mode: 'cors',
-            credentials: 'same-origin'
-          });
-          localStorage.setItem('echomaster_library', JSON.stringify(materials));
-        } catch (e: any) {
-          console.error("Backend Sync Error", e);
-          console.error(`Attempted sync URL: ${API_BASE || window.location.origin}/materials/sync`);
-        }
-      }
-    };
+  // 1. 检查是否有数据
+  if (!materials || materials.length === 0) {
+    alert("列表为空，无需同步");
+    return;
+  }
+
+  try {
+    console.log("--- 开始同步到 Supabase ---");
+    
+    // 2. 发起 POST 请求
+    // 注意：直接使用相对路径 /api/...，干掉未定义的 API_BASE
+    const response = await fetch('/api/materials/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      // 🚩 关键修正：确保发送的是当前的 materials 数组
+      body: JSON.stringify({ materials: materials }), 
+    });
+
+    // 3. 处理结果
+    if (response.ok) {
+      const result = await response.json();
+      console.log("✅ 同步成功:", result);
+      alert(`同步成功！已保存 ${result.count} 条资料到云端。`);
+    } else {
+      const errorData = await response.json();
+      console.error("❌ 同步失败:", errorData);
+      alert("同步失败: " + (errorData.message || "服务器错误"));
+    }
+  } catch (err) {
+    console.error("❌ 网络请求崩溃:", err);
+    alert("无法连接到服务器，请检查网络或 Vercel 部署状态");
+  }
+};
     
     const timer = setTimeout(syncToBackend, 2000);
     return () => clearTimeout(timer);
