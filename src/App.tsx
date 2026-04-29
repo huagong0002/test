@@ -131,12 +131,13 @@ export default function App() {
 
   // --- 3. 自动同步逻辑：当 materials 发生变化时，延迟 2 秒自动同步 ---
   useEffect(() => {
-    if (materials.length > 0) {
+    if (materials && materials.length > 0) {
       const timer = setTimeout(() => {
         syncToBackend();
-      }, 2000); // 防抖处理，避免频繁提交
+      }, 2000); 
       return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materials]);
 
   // --- 4. 编辑回填逻辑：将当前编辑的 material 同步到 materials 列表中 ---
@@ -164,34 +165,6 @@ export default function App() {
       });
     }, 1000);
 
-    return () => clearTimeout(timer);
-  }, [material]);
-
-
-  // Sync current material changes back to local materials list
-  useEffect(() => {
-    if (!material) return;
-    
-    const timer = setTimeout(() => {
-      setMaterials(prev => {
-        const index = prev.findIndex(m => m.id === material.id);
-        if (index === -1) return prev;
-        
-        // Only update if content actually changed to avoid redundant re-renders
-        const existing = prev[index];
-        const { lastModified: _old, ...restExisting } = existing;
-        const { lastModified: _new, ...restCurrent } = material;
-        
-        if (JSON.stringify(restExisting) === JSON.stringify(restCurrent)) {
-          return prev;
-        }
-        
-        const newList = [...prev];
-        newList[index] = { ...material, lastModified: Date.now() };
-        return newList;
-      });
-      setLastSaved(new Date().toLocaleTimeString());
-    }, 1000);
     return () => clearTimeout(timer);
   }, [material]);
 
@@ -614,7 +587,7 @@ export default function App() {
                 )}
                 <button 
                   onClick={(e) => {
-                    e.peventDefault();
+                    e.preventDefault();
                     setMaterials(prev => prev.map(m => m.id === material.id ? material : m));
                     syncToBackend();
                   }}
