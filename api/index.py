@@ -51,54 +51,64 @@ def login():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# 获取资料库：从 Supabase 读取，实现全员共享
+# 将表名定义为常量，防止手抖写错
+TABLE_NAME = "materials_db"
+
+# 1. 获取资料库：全员共享
 @app.route('/api/materials', methods=['GET'])
 def get_materials():
     if not supabase:
         return jsonify({"error": "数据库未连接"}), 500
     try:
-        # 从 materials_db 表读取所有数据
-        response = supabase.table("materials_db").select("*").execute()
-        # 提取 content 字段中的原始 JSON 数据
+        # 执行查询，按最后修改时间倒序排列（可选）
+        response = supabase.table(TABLE_NAME).select("*").order("created_at", desc=True).execute()
+        
+        # 提取 content 字段
         materials = [item['content'] for item in response.data]
         return jsonify(materials)
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print(f"Fetch Error: {e}") # 在 Vercel Logs 中记录详细错误
+        return jsonify({"status": "error", "message": "读取数据库失败"}), 500
 
-# 同步资料库：由管理员触发，将数据永久存入 Supabase
+# 2. 同步资料库：管理员触发
 @app.route('/api/materials/sync', methods=['POST'])
 def sync_materials():
     if not supabase:
         return jsonify({"error": "数据库未连接"}), 500
     try:
         data = request.get_json()
-        materials = data.get("materials", [])
+        materials_list = data.get("materials", [])
         
-        if not materials:
+        if not materials_list:
             return jsonify({"status": "success", "message": "无数据同步"})
 
-        # 使用 Upsert (更新或插入)：ID 存在则更新内容，不存在则创建
-        for m in materials:
-            supabase.table("materials_db").upsert({
-                "id": str(m['id']),
-                "content": m
-            }).execute()
+        # ✅ 优化：批量同步。一次网络请求解决所有更新
+        # 准备批量 upsert 的数据格式
+        upsert_data = [
+            {"id": str(m['id']), "content": m} 
+            for m in materials_list
+        ]
+        
+        # 使用单个 .upsert() 调用
+        supabase.table(TABLE_NAME).upsert(upsert_data).execute()
             
-        return jsonify({"status": "success", "count": len(materials)})
+        return jsonify({"status": "success", "count": len(materials_list)})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print(f"Sync Error: {e}")
+        return jsonify({"status": "error", "message": "云端同步失败"}), 500
 
-# 删除资料：从 Supabase 中物理删除
+# 3. 删除资料
 @app.route('/api/materials/<id>', methods=['DELETE'])
 def delete_material(id):
     if not supabase:
         return jsonify({"error": "数据库未连接"}), 500
     try:
-        supabase.table("materials_db").delete().eq("id", str(id)).execute()
+        # 确保 ID 是字符串匹配
+        supabase.table(TABLE_NAME).delete().eq("id", str(id)).execute()
         return jsonify({"status": "success"})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
+        return jsonify({"status": "error", "message": "删除失败"}), 500
+        
 # 注册接口 (临时简单实现)
 @app.route('/api/register', methods=['POST'])
 def register():
