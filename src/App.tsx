@@ -67,20 +67,17 @@ export default function App() {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
   // Persistence: Load library from backend on mount
+  // 🚩 修复：仅负责监听 materials 变化并触发同步
   useEffect(() => {
-    const fetchLibrary = async () => {
-  try {
-    console.log("--- 正在尝试从云端加载资料库 ---");
+  if (materials.length > 0) {
+    // 设置 2 秒防抖，避免用户输入时频繁请求后端
+    const timer = setTimeout(() => {
+      syncToBackend();
+    }, 2000);
     
-    // 🚩 核心修正：使用相对路径 '/api/...' 自动适配 Vercel 环境
-    // 这样就不会再报 'API_BASE is not defined' 错误
-    const response = await fetch('/api/materials', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache' // 确保获取的是数据库最新数据
-      }
-    });
+    return () => clearTimeout(timer);
+  }
+}, [materials]); // 监听整个列表的变化
 
     // 检查响应状态
     if (!response.ok) {
@@ -135,7 +132,7 @@ export default function App() {
         }
       } catch (e) {
         console.error("Server health check FAILED.", e);
-        console.error(`Check URL: ${API_BASE || window.location.origin}/health`);
+        console.error(`Check URL: ${ window.location.origin}/api/health`);
       }
     };
     checkHealth();
@@ -168,40 +165,38 @@ export default function App() {
 
   // Persistence: Sync library to backend whenever materials change
   useEffect(() => {
-    const syncToBackend = async () => {
-  // 1. 检查是否有数据
+   // 🚩 修复：提取为独立函数，确保可以直接被按钮调用
+const syncToBackend = async () => {
+  // 检查是否有数据，防止空提交
   if (!materials || materials.length === 0) {
-    alert("列表为空，无需同步");
+    console.warn("列表为空，跳过同步");
     return;
   }
 
   try {
-    console.log("--- 开始同步到 Supabase ---");
+    console.log("--- 正在发起云端同步 ---");
     
-    // 2. 发起 POST 请求
-    // 注意：直接使用相对路径 /api/...，干掉未定义的 API_BASE
+    // 使用相对路径，彻底移除未定义的 API_BASE
     const response = await fetch('/api/materials/sync', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      // 🚩 关键修正：确保发送的是当前的 materials 数组
+      // 确保发送的是最新的 materials 状态
       body: JSON.stringify({ materials: materials }), 
     });
 
-    // 3. 处理结果
     if (response.ok) {
       const result = await response.json();
       console.log("✅ 同步成功:", result);
-      alert(`同步成功！已保存 ${result.count} 条资料到云端。`);
+      // 可选：添加非干扰提示
+      setLastSaved(`云端已同步 ${new Date().toLocaleTimeString()}`);
     } else {
       const errorData = await response.json();
       console.error("❌ 同步失败:", errorData);
-      alert("同步失败: " + (errorData.message || "服务器错误"));
     }
   } catch (err) {
-    console.error("❌ 网络请求崩溃:", err);
-    alert("无法连接到服务器，请检查网络或 Vercel 部署状态");
+    console.error("❌ 网络连接异常:", err);
   }
 };
     
@@ -654,7 +649,7 @@ export default function App() {
                   </span>
                 )}
                 <button 
-                  onClick={() => setMaterials(prev => prev.map(m => m.id === material.id ? material : m))}
+                  onClick={syncToBackend}
                   className="btn-glass p-2.5 rounded-xl text-blue-400 hover:text-white transition-all group"
                   title="同步到库"
                 >
