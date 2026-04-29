@@ -69,7 +69,6 @@ export default function App() {
   // --- 1. 核心同步函数：将本地 materials 发送到 Supabase ---
   const syncToBackend = async () => {
     if (!materials || materials.length === 0) {
-      console.warn("列表为空，跳过同步");
       return;
     }
 
@@ -83,15 +82,10 @@ export default function App() {
       });
 
       if (response.ok) {
-        const result = await response.json();
-        setLastSaved(`云端已同步 ${new Date().toLocaleTimeString()}`);
-        console.log("✅ 云端同步成功，受影响行数:", result.count);
-      } else {
-        const errorData = await response.json();
-        console.error("❌ 同步失败:", errorData);
+        alert("✅ 云端同步成功!");
       }
     } catch (err) {
-      console.error("❌ 网络连接异常:", err);
+      console.error("❌ 前端执行崩溃，请检查是否有未定义变量:", err);
     }
   };
 
