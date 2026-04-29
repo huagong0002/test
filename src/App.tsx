@@ -66,57 +66,41 @@ export default function App() {
 
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
-  // Persistence: Load library from backend on mount
-  // 🚩 修复：仅负责监听 materials 变化并触发同步
+ // Persistence: Load library from backend on mount
   useEffect(() => {
-  if (materials.length > 0) {
-    // 设置 2 秒防抖，避免用户输入时频繁请求后端
-    const timer = setTimeout(() => {
-      syncToBackend();
-    }, 2000);
-    
-    return () => clearTimeout(timer);
-  }
-}, [materials]); // 监听整个列表的变化
-
-    // 检查响应状态
-    if (!response.ok) {
-      throw new Error(`服务器响应异常: ${response.status}`);
-    }
-
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      
-      if (Array.isArray(data)) {
-        // ✅ 成功获取云端数组数据
-        setMaterials(data);
-        // 同步备份到本地，即使断网用户也能看到
-        localStorage.setItem('echomaster_library', JSON.stringify(data));
-        console.log("✅ 云端资料同步成功，当前条数:", data.length);
-      } else {
-        console.error("❌ 后端返回数据格式错误 (不是数组):", data);
-      }
-    } else {
-      throw new Error("服务器返回的不是有效的 JSON 格式");
-    }
-
-  } catch (e) {
-    // 🚩 兜底逻辑：如果云端获取失败（断网或 500 错误），加载本地旧数据
-    console.warn("⚠️ 无法获取云端资料，正在启动本地兜底方案:", e.message);
-    
-    const savedLibrary = localStorage.getItem('echomaster_library');
-    if (savedLibrary) {
+    const fetchLibrary = async () => {
       try {
-        const localData = JSON.parse(savedLibrary);
-        setMaterials(localData);
-        console.log("ℹ️ 已成功加载本地备份资料");
-      } catch (parseError) {
-        console.error("❌ 本地备份资料已损坏:", parseError);
+        console.log("--- 正在尝试从云端加载资料库 ---");
+        const response = await fetch('/api/materials', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (!response.ok) throw new Error(`服务器异常: ${response.status}`);
+
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          // ✨ 这里的 await 现在安全了，因为它在 async fetchLibrary 内部
+          const data = await response.json();
+          
+          if (Array.isArray(data)) {
+            setMaterials(data);
+            localStorage.setItem('echomaster_library', JSON.stringify(data));
+            console.log("✅ 云端资料同步成功");
+          }
+        }
+      } catch (e: any) {
+        console.warn("⚠️ 加载失败，启动本地兜底:", e.message);
+        const saved = localStorage.getItem('echomaster_library');
+        if (saved) setMaterials(JSON.parse(saved));
       }
-    }
-  }
-};
+    };
+
+    fetchLibrary();
+  }, []); // 确保这里的闭合括号正确
 
     // Debug: Check Backend Health
     const checkHealth = async () => {
