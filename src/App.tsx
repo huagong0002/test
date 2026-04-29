@@ -69,40 +69,57 @@ export default function App() {
   // Persistence: Load library from backend on mount
   useEffect(() => {
     const fetchLibrary = async () => {
-      try {
-        const response = await fetch(`/api/materials`, {
-          mode: 'cors',
-          credentials: 'same-origin'
-        });
-        const contentType = response.headers.get('content-type');
-        
-        if (response.ok && contentType && contentType.includes('application/json')) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            setMaterials(data);
-          } else {
-            console.error("Received non-array data for materials:", data);
-            setMaterials([]);
-          }
-        } else {
-          const text = await response.text();
-          console.warn(`Library fetch failed - Status: ${response.status}, Content-Type: ${contentType}`);
-          throw new Error('Invalid response from server');
-        }
-      } catch (e: any) {
-        console.error("Backend Library Load Error", e);
-        console.error(`Attempted URL: ${API_BASE || window.location.origin}/materials`);
-        // Fallback to localStorage if backend fails
-        const savedLibrary = localStorage.getItem('echomaster_library');
-        const res = await fetch('/api/materials');
-        if (res.ok) {
-        const data = await res.json();
-        setMaterials(data); // 必须执行这一步，才能实现全员同步
-}
-      }
-    };
+  try {
+    console.log("--- 正在尝试从云端加载资料库 ---");
     
-    fetchLibrary();
+    // 🚩 核心修正：使用相对路径 '/api/...' 自动适配 Vercel 环境
+    // 这样就不会再报 'API_BASE is not defined' 错误
+    const response = await fetch('/api/materials', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache' // 确保获取的是数据库最新数据
+      }
+    });
+
+    // 检查响应状态
+    if (!response.ok) {
+      throw new Error(`服务器响应异常: ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await response.json();
+      
+      if (Array.isArray(data)) {
+        // ✅ 成功获取云端数组数据
+        setMaterials(data);
+        // 同步备份到本地，即使断网用户也能看到
+        localStorage.setItem('echomaster_library', JSON.stringify(data));
+        console.log("✅ 云端资料同步成功，当前条数:", data.length);
+      } else {
+        console.error("❌ 后端返回数据格式错误 (不是数组):", data);
+      }
+    } else {
+      throw new Error("服务器返回的不是有效的 JSON 格式");
+    }
+
+  } catch (e) {
+    // 🚩 兜底逻辑：如果云端获取失败（断网或 500 错误），加载本地旧数据
+    console.warn("⚠️ 无法获取云端资料，正在启动本地兜底方案:", e.message);
+    
+    const savedLibrary = localStorage.getItem('echomaster_library');
+    if (savedLibrary) {
+      try {
+        const localData = JSON.parse(savedLibrary);
+        setMaterials(localData);
+        console.log("ℹ️ 已成功加载本地备份资料");
+      } catch (parseError) {
+        console.error("❌ 本地备份资料已损坏:", parseError);
+      }
+    }
+  }
+};
 
     // Debug: Check Backend Health
     const checkHealth = async () => {
