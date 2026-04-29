@@ -79,8 +79,8 @@ def sync_materials():
         data = request.get_json()
         materials_list = data.get("materials", [])
         
-        if not materials_list:
-            return jsonify({"status": "success", "message": "无数据同步"})
+         if not isinstance(materials_list, list):
+            return jsonify({"status": "error", "message": "Data format must be a list"}), 400
 
         # ✅ 优化：批量同步。一次网络请求解决所有更新
         # 准备批量 upsert 的数据格式
